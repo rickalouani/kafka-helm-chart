@@ -2,7 +2,7 @@
 # Kafka:
 # ------------------------------------------------------------------------------
 
-name: archbox-kafka
+name: kafka-broker
 
 ## The StatefulSet installs 3 pods by default
 replicas: 3
