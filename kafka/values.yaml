@@ -1,37 +1,86 @@
-# Default values for kafka.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-replicaCount: 1
-image:
-  repository: nginx
-  tag: stable
-  pullPolicy: IfNotPresent
-service:
-  name: nginx
-  type: ClusterIP
-  externalPort: 80
-  internalPort: 80
-ingress:
+# ------------------------------------------------------------------------------
+# Kafka:
+# ------------------------------------------------------------------------------
+
+name: archbox-kafka
+
+## The StatefulSet installs 3 pods by default
+replicas: 3
+
+## The kafka image repository
+image: "ches/kafka"
+
+## The kafka image tag
+imageTag: "latest"
+
+## Specify a imagePullPolicy
+## ref: http://kubernetes.io/docs/user-guide/images/#pre-pulling-images
+imagePullPolicy: "IfNotPresent"
+
+security:
   enabled: false
-  # Used to create an Ingress record.
-  hosts:
-    - chart-example.local
-  annotations:
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  tls:
-    # Secrets must be manually created in the namespace.
-    # - secretName: chart-example-tls
-    #   hosts:
-    #     - chart-example.local
+  runAsUser: 1000
+  fsGroup: 1000
+## Configure resource requests and limits
+## ref: http://kubernetes.io/docs/user-guide/compute-resources/
 resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   # limits:
-  #  cpu: 100m
-  #  memory: 128Mi
+  #   cpu: 200m
+  #   memory: 1536Mi
   # requests:
-  #  cpu: 100m
-  #  memory: 128Mi
+  #   cpu: 100m
+  #   memory: 1024Mi
+  #
+## The size of the persistentVolume to allocate to each Kafka Pod in the StatefulSet.
+storage: "1Gi"
+storageClassName: emptyDir 
+
+## The StatefulSet Update Strategy which Kafka will use when changes are applied.
+## ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
+updateStrategy: "RollingUpdate" # or "OnDelete"
+
+## If `updateStrategy` is set to "RollingUpdate", you may optionally specify which partition
+## should be updated first.
+## ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#partitions
+rollingUpdatePartition: 0
+
+## The location within the Kafka container where the PV will mount its storage and Kafka will store
+## its logs
+dataDirectory: "/kafka/data"
+
+## The subpath within the Kafka container's PV where logs will be stored
+## This is combined with `dataDirectory` above, to create, by default: /opt/kafka/data/logs
+logSubPath: "logs"
+
+## Pod scheduling preferences.
+## ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+##
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 1
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - "kafka"
+        topologyKey: "kubernetes.io/hostname"
+
+## Configuration Overrides. Specify any Kafka settings you would like set on the StatefulSet
+## here in map format, as defined in the official docs:
+## ref: https://kafka.apache.org/documentation/#brokerconfigs
+zookeeperConnect: "archbox-zookeeper:2181"
+advertisedListeners: PLAINTEXT://0.0.0.0:9092
+listeners: "PLAINTEXT://0.0.0.0:9092"
+# ------------------------------------------------------------------------------
+# Zookeeper:
+# ------------------------------------------------------------------------------
+
+zookeeper:
+  ## Zookeeper Chart name and port
+  name: "archbox-zookeeper"
+  port: 2181
+  url: "archbox-zookeeper:2181"
+

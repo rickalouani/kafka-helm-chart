@@ -1,37 +1,41 @@
-# Default values for zookeeper.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-replicaCount: 1
-image:
-  repository: nginx
-  tag: stable
-  pullPolicy: IfNotPresent
-service:
-  name: nginx
-  type: ClusterIP
-  externalPort: 80
-  internalPort: 80
-ingress:
+name: archbox-zookeeper
+replicas: 3
+# minAvailable: 2
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi 
+  limits:
+    cpu: 200m
+    memory: 500Mi
+storage: "1Gi"
+storageClassName: default 
+serverPort: 2888
+leaderElectionPort: 3888
+clientPort: 2181
+imagePullPolicy: "Always"
+tickTimeMs: 2000
+initTicks: 10
+syncTicks: 10
+clientCnxns: 60
+snapRetain: 3
+purgeHours: 0
+probeInitialDelaySeconds: 15
+probeTimeoutSeconds: 5
+logLevel: "INFO"
+security:
   enabled: false
-  # Used to create an Ingress record.
-  hosts:
-    - chart-example.local
-  annotations:
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  tls:
-    # Secrets must be manually created in the namespace.
-    # - secretName: chart-example-tls
-    #   hosts:
-    #     - chart-example.local
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #  cpu: 100m
-  #  memory: 128Mi
-  # requests:
-  #  cpu: 100m
-  #  memory: 128Mi
+  runAsUser: 1000
+  fsGroup: 1000
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 1
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - "zookeeper"
+        topologyKey: "kubernetes.io/hostname"

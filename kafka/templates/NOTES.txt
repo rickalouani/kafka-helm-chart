@@ -1,19 +1,38 @@
-1. Get the application URL by running these commands:
-{{- if .Values.ingress.enabled }}
-{{- range .Values.ingress.hosts }}
-  http://{{ . }}
-{{- end }}
-{{- else if contains "NodePort" .Values.service.type }}
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "fullname" . }})
-  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
-  echo http://$NODE_IP:$NODE_PORT
-{{- else if contains "LoadBalancer" .Values.service.type }}
-     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-           You can watch the status of by running 'kubectl get svc -w {{ template "fullname" . }}'
-  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ template "fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-  echo http://$SERVICE_IP:{{ .Values.service.externalPort }}
-{{- else if contains "ClusterIP" .Values.service.type }}
-  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app={{ template "name" . }},release={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
-  echo "Visit http://127.0.0.1:8080 to use your application"
-  kubectl port-forward $POD_NAME 8080:{{ .Values.service.externalPort }}
-{{- end }}
+You can connect to Kafka by running a simple pod in the K8s cluster like this:
+
+kubectl create -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: testclient
+  namespace: {{ .Release.Namespace }}
+spec:
+  containers:
+  - name: kafka
+    image: {{ .Values.image }}:{{ .Values.imageTag }}
+    command:
+      - sh
+      - -c
+      - "exec tail -f /dev/null"
+EOF
+
+Once you have the testclient pod above running, you can list all kafka
+topics with:
+
+  kubectl -n {{ .Release.Namespace }} exec testclient -- /kafka/bin/kafka-topics.sh --zookeeper {{ template "zookeeper.url" . }} --list
+
+To create a new topic:
+
+  kubectl -n {{ .Release.Namespace }} exec testclient -- /kafka/bin/kafka-topics.sh --zookeeper {{ template "zookeeper.url" . }} --topic scispike --create --partitions 1 --replication-factor 1
+
+To listen for messages on a topic:
+
+  kubectl -n {{ .Release.Namespace }} exec -ti testclient -- /kafka/bin/kafka-console-consumer.sh --bootstrap-server {{ template "kafka.name" . }}:9092 --topic scispike --from-beginning
+
+To stop the listener session above press: Ctrl+C
+
+To start an interactive message producer session:
+  kubectl -n {{ .Release.Namespace }} exec -ti testclient -- /kafka/bin/kafka-console-producer.sh --broker-list {{ template "kafka.name" . }}-headless:9092 --topic scispike
+
+To create a message in the above session, simply type the message and press "enter"
+To end the producer session try: Ctrl+C

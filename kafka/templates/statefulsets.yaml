@@ -1,0 +1,110 @@
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ template "kafka.name" . }}
+  labels:
+    app: {{ include "kafka.name" . | quote }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+spec:
+  serviceName: {{ template "kafka.name" . }}-headless
+  updateStrategy:
+    type: {{ .Values.updateStrategy }}
+    {{ if eq .Values.updateStrategy "RollingUpdate" -}}
+    rollingUpdate:
+      partition: {{ .Values.rollingUpdatePartition }}
+    {{- end }}
+  replicas: {{ default 3 .Values.replicas }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "kafka.name" . | quote }}
+        release: {{ .Release.Name | quote }}
+    spec:
+      initContainers:
+      - name: init
+        image: busybox
+        command: ['sh', '-c', 'until [ "$(echo ruok | nc -w 1 {{ .Values.zookeeper.name }} {{ .Values.zookeeper.port }})" == imok ]; do echo waiting for zookeeper; sleep 5; done;']
+        #        ports:
+        #- containerPort: 9092
+        #  name: kafka
+        #- name: outside
+        #  containerPort: 9094
+        #- name: jmx
+        #  containerPort: 5555
+      containers:
+      - name: {{ template "kafka.name" . }}-broker
+        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+        imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+#        livenessProbe:
+#          tcpSocket:
+#            port: 9092
+#          initialDelaySeconds: 30
+#          timeoutSeconds: 5
+#        readinessProbe:
+#          exec:
+#            command:
+#              - kafka-topics
+#              - --zookeeper
+#              - {{ template "zookeeper.url" . }}
+#              - --list
+#          initialDelaySeconds: 30
+#          timeoutSeconds: 5
+        ports:
+        - containerPort: 9092
+          name: kafka
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+       #- name: KAFKA_LOG4J_OPTS
+       #  value: -Dlog4j.configuration=file:/kafka/config/log4j.properties
+        - name: JMX_PORT
+          value: "5555"
+        - name: ZOOKEEPER_CONNECTION_STRING
+          value: archbox-zookeeper:2181
+        volumeMounts:
+        - name: datadir
+          mountPath: /kafka/data 
+        - name: config-volume
+          mountPath: /kafka/config
+      volumes:
+      - name: datadir
+        #persistentVolumeClaim:
+        # claimName: datadir
+        emptyDir: {} 
+     {{- if eq .Values.security.enabled true }}
+       securityContext:
+         runAsUser: {{ .Values.security.runAsUser }}
+         fsGroup: {{ .Values.security.fsGroup }}
+       {{- end }}
+ 
+      - name: config-volume
+        configMap:
+          name: {{ .Release.Name }}-configmap
+          items:
+          - key: server.properties.template
+            path: server.properties.template
+          - key: server.properties
+            path: server.properties
+          - key: log4j.properties
+            path: log4j.properties
+ {{- if eq .Values.security.enabled true }}
+       securityContext:
+       runAsUser: {{ .Values.security.runAsUser }}
+       fsGroup: {{ .Values.security.fsGroup }}
+ {{- end }}
+
+#  volumeClaimTemplates:
+#  - metadata:
+#      name: datadir
+#    spec:
+#      accessModes: [ "ReadWriteOnce" ]
+#      resources:
+#        requests:
+#          storage: {{ .Values.storage }}
+#      {{- if .Values.storageClass }}
+#      storageClassName: {{ .Values.storageClassName | quote }}
+#      {{- end }}
